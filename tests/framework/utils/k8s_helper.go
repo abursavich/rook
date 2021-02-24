@@ -45,7 +45,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	storagev1util "k8s.io/kubernetes/pkg/apis/storage/v1/util"
 )
 
 // K8sHelper is a helper for common kubectl commands
@@ -1095,12 +1094,32 @@ func (k8sh *K8sHelper) IsDefaultStorageClassPresent() (bool, error) {
 	}
 
 	for _, sc := range scs.Items {
-		if storagev1util.IsDefaultAnnotation(sc.ObjectMeta) {
+		if isDefaultStorageClass(sc.ObjectMeta) {
 			return true, nil
 		}
 	}
 
 	return false, nil
+}
+
+// isDefaultStorageClassAnnotation represents a StorageClass annotation that
+// marks a class as the default StorageClass
+const isDefaultStorageClassAnnotation = "storageclass.kubernetes.io/is-default-class"
+
+// betaIsDefaultStorageClassAnnotation is the beta version of isDefaultStorageClassAnnotation.
+// TODO: remove beta when no longer used
+const betaIsDefaultStorageClassAnnotation = "storageclass.beta.kubernetes.io/is-default-class"
+
+// isDefaultStorageClass returns a boolean if the annotation is set to "true"
+// TODO: remove beta when no longer needed
+func isDefaultStorageClass(obj metav1.ObjectMeta) bool {
+	if obj.Annotations[isDefaultStorageClassAnnotation] == "true" {
+		return true
+	}
+	if obj.Annotations[betaIsDefaultStorageClassAnnotation] == "true" {
+		return true
+	}
+	return false
 }
 
 // CheckPvcCount returns True if expected number pvs for a app are found
