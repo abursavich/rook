@@ -38,7 +38,6 @@ import (
 	"github.com/rook/rook/pkg/clusterd"
 	"github.com/rook/rook/pkg/operator/ceph/agent"
 	"github.com/rook/rook/pkg/operator/k8sutil"
-	"k8s.io/kubernetes/pkg/volume/flexvolume"
 )
 
 const (
@@ -150,11 +149,49 @@ func TouchFlexDrivers(vendor, driverName string) {
 	}
 }
 
+const (
+	// statusSuccess represents the successful completion of command.
+	statusSuccess = "Success"
+	// statusNotSupported represents that the command is not supported.
+	statusNotSupported = "Not supported"
+)
+
+// driverStatus represents the return value of the driver callout.
+// Copied from "k8s.io/kubernetes/pkg/volume/flexvolume"
+type driverStatus struct {
+	// Status of the callout. One of "Success", "Failure" or "Not supported".
+	Status string `json:"status"`
+	// Reason for success/failure.
+	Message string `json:"message,omitempty"`
+	// Path to the device attached. This field is valid only for attach calls.
+	// ie: /dev/sdx
+	DevicePath string `json:"device,omitempty"`
+	// Cluster wide unique name of the volume.
+	VolumeName string `json:"volumeName,omitempty"`
+	// Represents volume is attached on the node
+	Attached bool `json:"attached,omitempty"`
+	// Returns capabilities of the driver.
+	// By default we assume all the capabilities are supported.
+	// If the plugin does not support a capability, it can return false for that capability.
+	Capabilities *driverCapabilities `json:",omitempty"`
+	// Returns the actual size of the volume after resizing is done, the size is in bytes.
+	ActualVolumeSize int64 `json:"volumeNewSize,omitempty"`
+}
+
+// driverCapabilities represents what driver can do
+type driverCapabilities struct {
+	Attach           bool `json:"attach"`
+	SELinuxRelabel   bool `json:"selinuxRelabel"`
+	SupportsMetrics  bool `json:"supportsMetrics"`
+	FSGroup          bool `json:"fsGroup"`
+	RequiresFSResize bool `json:"requiresFSResize"`
+}
+
 // Encode the flex settings in json
 func generateFlexSettings(enableSELinuxRelabeling, enableFSGroup bool) ([]byte, error) {
-	status := flexvolume.DriverStatus{
-		Status: flexvolume.StatusSuccess,
-		Capabilities: &flexvolume.DriverCapabilities{
+	status := driverStatus{
+		Status: statusSuccess,
+		Capabilities: &driverCapabilities{
 			Attach: false,
 			// Required for metrics
 			SupportsMetrics: true,
@@ -178,7 +215,7 @@ func generateFlexSettings(enableSELinuxRelabeling, enableFSGroup bool) ([]byte, 
 func LoadFlexSettings(directory string) []byte {
 	// Load the settings from the expected config file, ensure they are valid settings, then return them in
 	// a json string to the caller
-	var status flexvolume.DriverStatus
+	var status driverStatus
 	if output, err := ioutil.ReadFile(filepath.Clean(path.Join(directory, settingsFilename))); err == nil {
 		if err := json.Unmarshal(output, &status); err == nil {
 			if output, err = json.Marshal(status); err == nil {
