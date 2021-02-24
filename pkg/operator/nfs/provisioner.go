@@ -31,7 +31,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"sigs.k8s.io/sig-storage-lib-external-provisioner/v6/controller"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -262,7 +261,7 @@ func (p *Provisioner) storageClassForPV(ctx context.Context, pv *v1.PersistentVo
 	if p.client == nil {
 		return nil, fmt.Errorf("Cannot get kube client")
 	}
-	className := helper.GetPersistentVolumeClass(pv)
+	className := getPersistentVolumeClass(pv)
 	if className == "" {
 		return nil, fmt.Errorf("Volume has no storage class")
 	}
@@ -274,10 +273,29 @@ func (p *Provisioner) storageClassForPVC(ctx context.Context, pvc *v1.Persistent
 	if p.client == nil {
 		return nil, fmt.Errorf("Cannot get kube client")
 	}
-	className := helper.GetPersistentVolumeClaimClass(pvc)
+	className := getPersistentVolumeClaimClass(pvc)
 	if className == "" {
 		return nil, fmt.Errorf("Volume has no storage class")
 	}
 
 	return p.client.StorageV1().StorageClasses().Get(ctx, className, metav1.GetOptions{})
+}
+
+func getPersistentVolumeClass(volume *v1.PersistentVolume) string {
+	// Use beta annotation first
+	if class, found := volume.Annotations[v1.BetaStorageClassAnnotation]; found {
+		return class
+	}
+	return volume.Spec.StorageClassName
+}
+
+func getPersistentVolumeClaimClass(claim *v1.PersistentVolumeClaim) string {
+	// Use beta annotation first
+	if class, found := claim.Annotations[v1.BetaStorageClassAnnotation]; found {
+		return class
+	}
+	if claim.Spec.StorageClassName != nil {
+		return *claim.Spec.StorageClassName
+	}
+	return ""
 }
